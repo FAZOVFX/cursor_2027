@@ -1,0 +1,16 @@
+{
+  "name": "cursor_2027",
+  "install": "if [ -f package-lock.json ]; then npm ci; else npm install; fi",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [
+    {
+      "name": "Vite dev server",
+      "port": 5173
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+.app {
+  width: min(92vw, 480px);
+  padding: 2.5rem 0;
+}
+
+.app__header {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.app__badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9db2ff;
+  background: rgba(112, 138, 255, 0.12);
+  border: 1px solid rgba(112, 138, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+}
+
+.app__header h1 {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.app__subtitle {
+  margin: 0;
+  color: #a2a8bd;
+  font-size: 0.95rem;
+}
+
+.card {
+  background: rgba(20, 24, 43, 0.72);
+  border: 1px solid rgba(120, 130, 180, 0.18);
+  border-radius: 18px;
+  padding: 1.4rem;
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.card__input-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+}
+
+.card__input {
+  flex: 1;
+  padding: 0.7rem 0.9rem;
+  border-radius: 11px;
+  border: 1px solid rgba(120, 130, 180, 0.28);
+  background: #0e1122;
+  color: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.card__input:focus {
+  border-color: #6f86ff;
+}
+
+.card__add {
+  padding: 0.7rem 1.15rem;
+  border-radius: 11px;
+  border: none;
+  background: linear-gradient(135deg, #6f86ff, #9a6bff);
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.card__add:hover {
+  transform: translateY(-1px);
+}
+
+.card__add:active {
+  transform: translateY(0);
+  opacity: 0.9;
+}
+
+.card__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(120, 130, 180, 0.12);
+}
+
+.task__label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+}
+
+.task__label input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #6f86ff;
+}
+
+.task__title {
+  font-size: 0.98rem;
+}
+
+.task__title--done {
+  color: #6f7590;
+  text-decoration: line-through;
+}
+
+.card__footer {
+  margin-top: 1.2rem;
+  text-align: right;
+  font-size: 0.85rem;
+  color: #9aa0b8;
+}
+
+.card__footer span {
+  color: #e8eaf1;
+  font-weight: 700;
+}
