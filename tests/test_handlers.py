@@ -273,6 +273,43 @@ async def test_voice_message_no_match(tmp_path, monkeypatch):
     assert "aniqlay olmadim" in args[0]
 
 
+async def test_generic_download_error_on_platform_hints_cookies(tmp_path, monkeypatch):
+    context = make_context()
+    update = MagicMock()
+    update.message.text = "https://www.instagram.com/reel/x/"
+    update.message.caption = None
+    update.effective_chat.id = 321
+
+    monkeypatch.setattr(
+        downloader, "download",
+        AsyncMock(side_effect=downloader.DownloadError("HTTP Error 403")),
+    )
+
+    await handlers.on_message(update, context)
+
+    msgs = [c.args[1] for c in context.bot.send_message.call_args_list
+            if len(c.args) > 1]
+    assert any("cookie" in t.lower() for t in msgs)
+
+
+async def test_search_failure_hints_cookies(monkeypatch):
+    context = make_context()
+    update = MagicMock()
+    update.message.text = "some song name"
+    update.message.caption = None
+    update.effective_chat.id = 321
+    monkeypatch.setattr(
+        downloader, "search",
+        AsyncMock(side_effect=downloader.DownloadError("blocked")),
+    )
+
+    await handlers.on_message(update, context)
+
+    status = context.bot.send_message.return_value
+    args, _ = status.edit_text.call_args
+    assert "cookie" in args[0].lower()
+
+
 def test_build_caption_includes_attribution():
     context = MagicMock()
     context.bot.username = "mybot"

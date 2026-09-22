@@ -71,6 +71,23 @@ def _build_caption(title: str, context: ContextTypes.DEFAULT_TYPE) -> str:
     return f"{header}⤵️ {tag} orqali yuklandi"
 
 
+def _cookie_hint(platform: str) -> str:
+    """User-facing hint (Uzbek) explaining that cookies are needed."""
+
+    if platform == "instagram":
+        name = "instagram_cookies.txt"
+        site = "Instagram"
+    else:
+        name = "youtube_cookies.txt"
+        site = "YouTube"
+    return (
+        f"🔒 {site} server IP’ni bloklagan (bot tekshiruvi), shuning uchun "
+        f"bajarib bo‘lmadi.\n\nTuzatish: administrator Render’da «{name}» nomli "
+        "cookie faylini (Secret File) qo‘shishi kerak. Batafsil — README’dagi "
+        "«Cookies» bo‘limi."
+    )
+
+
 def build_quality_keyboard(token: str) -> InlineKeyboardMarkup:
     """Inline keyboard offering MP3 + the supported video heights."""
 
@@ -160,14 +177,9 @@ async def present_search(update: Update, context: ContextTypes.DEFAULT_TYPE,
             cookiefile=cfg.cookie_file_for("youtube"),
             proxy=cfg.proxy,
         )
-    except downloader.AuthRequiredError:
-        await status.edit_text(
-            "🔒 Qidiruv uchun YouTube cookie kerak (bot tekshiruvi). "
-            "Administrator COOKIES_TXT ni sozlashi lozim."
-        )
-        return
-    except downloader.DownloadError:
-        await status.edit_text("❌ Qidiruvda xatolik. Keyinroq urinib ko‘ring.")
+    except (downloader.AuthRequiredError, downloader.DownloadError):
+        # YouTube search from a data-center IP usually fails without cookies.
+        await status.edit_text(_cookie_hint("youtube"))
         return
 
     if not results:
@@ -321,14 +333,16 @@ async def _process_download(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     read_timeout=180, write_timeout=180, connect_timeout=60,
                 )
     except downloader.AuthRequiredError:
-        await _reply(update, context, chat_id,
-                     "🔒 Bu media login talab qiladi (YouTube/Instagram bot "
-                     "tekshiruvi). Administrator cookie sozlamasini qo‘shishi kerak "
-                     "(COOKIES_TXT). README’dagi ko‘rsatmaga qarang.")
+        await _reply(update, context, chat_id, _cookie_hint(platform))
     except downloader.DownloadError as exc:
         logger.warning("Download failed for %s: %s", url, exc)
-        await _reply(update, context, chat_id,
-                     "❌ Yuklab bo‘lmadi. Havola noto‘g‘ri yoki media mavjud emas.")
+        # On cloud hosts YouTube/Instagram failures are almost always the
+        # IP/bot-check, so point the user at cookies for those platforms.
+        if platform in ("youtube", "instagram"):
+            await _reply(update, context, chat_id, _cookie_hint(platform))
+        else:
+            await _reply(update, context, chat_id,
+                         "❌ Yuklab bo‘lmadi. Havola noto‘g‘ri yoki media mavjud emas.")
     except Exception:  # noqa: BLE001 - surface a friendly message, log the rest
         logger.exception("Unexpected error while handling %s", url)
         await _reply(update, context, chat_id,
