@@ -65,8 +65,22 @@ async def _post_init(application) -> None:
     )
 
 
+def _log_cookie_status(config) -> None:
+    for platform in ("youtube", "instagram"):
+        path = config.cookie_file_for(platform)
+        if path:
+            logger.info("%s cookies: CONFIGURED (source detected, normalized).",
+                        platform)
+        else:
+            logger.warning(
+                "%s cookies: NOT configured. Downloads from %s will likely fail "
+                "with a bot-check. Add a Render Secret File '%s_cookies.txt'.",
+                platform, platform, platform)
+
+
 def main() -> None:
     config = load_config()
+    _log_cookie_status(config)
     application = build_application(config)
     application.post_init = _post_init
 
