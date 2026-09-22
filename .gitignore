@@ -9,6 +9,9 @@ venv/
 # Local env / secrets
 .env
 cookies*.txt
+# Real secret files live in secrets/ but must never be committed.
+secrets/*.txt
+!secrets/*.example
 
 # Downloads / temp
 downloads/

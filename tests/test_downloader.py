@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from bot import downloader
@@ -148,6 +150,48 @@ def test_config_cookie_materialization(tmp_path):
 def test_config_no_cookies():
     cfg = load_config({"BOT_TOKEN": "1:token"})
     assert cfg.cookie_file_for("youtube") is None
+
+
+def test_config_cookie_file_env_takes_precedence(tmp_path):
+    cookie = tmp_path / "yt.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n")
+    cfg = load_config(
+        {
+            "BOT_TOKEN": "1:token",
+            "YOUTUBE_COOKIES_FILE": str(cookie),
+            "YOUTUBE_COOKIES_TXT": "inline-should-be-ignored",
+        }
+    )
+    # An existing file wins over inline *_TXT content.
+    assert cfg.cookie_file_for("youtube") == str(cookie)
+
+
+def test_config_shared_cookie_file_for_both(tmp_path):
+    cookie = tmp_path / "all.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n")
+    cfg = load_config({"BOT_TOKEN": "1:token", "COOKIES_FILE": str(cookie)})
+    assert cfg.cookie_file_for("youtube") == str(cookie)
+    assert cfg.cookie_file_for("instagram") == str(cookie)
+
+
+def test_config_missing_cookie_file_falls_back_to_txt(tmp_path):
+    cfg = load_config(
+        {
+            "BOT_TOKEN": "1:token",
+            "YOUTUBE_COOKIES_FILE": str(tmp_path / "does_not_exist.txt"),
+            "YOUTUBE_COOKIES_TXT": "# Netscape\ncookie",
+        }
+    )
+    resolved = cfg.cookie_file_for("youtube")
+    assert resolved is not None
+    assert os.path.isfile(resolved)
+
+
+def test_config_token_from_file(tmp_path):
+    token_file = tmp_path / "bot_token.txt"
+    token_file.write_text("999:file-token\n")
+    cfg = load_config({"BOT_TOKEN_FILE": str(token_file)})
+    assert cfg.bot_token == "999:file-token"
 
 
 def test_config_requires_token():

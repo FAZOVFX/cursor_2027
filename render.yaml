@@ -13,12 +13,19 @@ services:
       # Render dashboard, do NOT commit it).
       - key: BOT_TOKEN
         sync: false
-      # Optional: Netscape-format cookies.txt contents to bypass YouTube/
-      # Instagram bot checks. See README "Cookies" section.
-      - key: COOKIES_TXT
-        sync: false
       # Max upload size in MB (Telegram bot hard limit is 50).
       - key: MAX_FILE_MB
         value: "49"
       # RENDER_EXTERNAL_URL is injected automatically and switches the bot to
       # webhook mode; no manual value needed.
+      #
+      # IMPORTANT: do NOT put cookies in an environment variable. A large
+      # cookies value makes Render's build fail with
+      #   "exec /usr/local/bin/run-buildkit.sh: argument list too long".
+      # Instead add cookies as a Render *Secret File* (Dashboard -> your
+      # service -> Environment -> Secret Files). The bot auto-detects these
+      # paths, no extra env var needed:
+      #   /etc/secrets/youtube_cookies.txt
+      #   /etc/secrets/instagram_cookies.txt
+      #   /etc/secrets/cookies.txt            (used for both if present)
+      # The token may also be provided as a Secret File /etc/secrets/bot_token.txt.

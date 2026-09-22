@@ -72,26 +72,48 @@ IPs** (Render, most clouds) with messages like *"Sign in to confirm you're not
 a bot"* or *"empty media response"*. The reliable fix is to provide **cookies**
 from a logged-in account.
 
-1. In your browser, install a "Get cookies.txt" extension (Netscape format).
-2. Log in to YouTube / Instagram, export `cookies.txt`.
-3. Paste the **entire file contents** into the Render env var `COOKIES_TXT`
-   (or platform-specific `YOUTUBE_COOKIES_TXT` / `INSTAGRAM_COOKIES_TXT`).
+> ⚠️ **Do NOT paste cookies into an environment variable on Render.** A large
+> cookies value makes the build fail with
+> `exec /usr/local/bin/run-buildkit.sh: argument list too long`. Use a **Secret
+> File** instead (see below).
 
-The bot writes these to a temporary file and passes them to yt-dlp. Without
-cookies, public content may still work intermittently, but gated content will
-return a "login required" message.
+### Recommended: Render Secret Files
+
+1. In your browser, install a "Get cookies.txt (Netscape)" extension.
+2. Log in to YouTube / Instagram, export `cookies.txt`.
+3. In Render: **your service → Environment → Secret Files → Add Secret File**.
+   Create a file named `youtube_cookies.txt` (and/or `instagram_cookies.txt`,
+   or a single `cookies.txt` for both) and paste the exported contents.
+
+The bot auto-detects these mounted paths — no extra env var needed:
+
+```
+/etc/secrets/youtube_cookies.txt
+/etc/secrets/instagram_cookies.txt
+/etc/secrets/cookies.txt            # used for both if the above are absent
+```
+
+You can also point to custom paths with `YOUTUBE_COOKIES_FILE`,
+`INSTAGRAM_COOKIES_FILE` or `COOKIES_FILE`. Templates live in
+[`secrets/`](./secrets). Without cookies, gated content returns a
+"login required" message (search still works).
+
+> The bot token can likewise be provided as a Secret File
+> `/etc/secrets/bot_token.txt` instead of the `BOT_TOKEN` env var.
 
 ## 5. Configuration
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `BOT_TOKEN` | ✅ | Telegram bot token from @BotFather. |
+| `BOT_TOKEN` | ✅* | Telegram bot token from @BotFather. |
+| `BOT_TOKEN_FILE` | ✅* | Path to a token file (default `/etc/secrets/bot_token.txt`). *One of `BOT_TOKEN`/file is required.* |
 | `RENDER_EXTERNAL_URL` / `WEBHOOK_URL` | auto on Render | Public URL → enables webhook mode. Unset → polling. |
 | `PORT` | auto on Render | Port to bind in webhook mode (default `10000`). |
 | `MAX_FILE_MB` | ❌ | Upload size cap in MB (Telegram hard limit is 50; default `49`). |
-| `COOKIES_TXT` | ❌ | cookies.txt contents for all platforms. |
-| `YOUTUBE_COOKIES_TXT` | ❌ | cookies.txt just for YouTube. |
-| `INSTAGRAM_COOKIES_TXT` | ❌ | cookies.txt just for Instagram. |
+| `YOUTUBE_COOKIES_FILE` | ❌ | Path to a YouTube cookies.txt file (Secret File). Preferred. |
+| `INSTAGRAM_COOKIES_FILE` | ❌ | Path to an Instagram cookies.txt file. |
+| `COOKIES_FILE` | ❌ | Path to a cookies.txt file used for both platforms. |
+| `COOKIES_TXT` / `YOUTUBE_COOKIES_TXT` / `INSTAGRAM_COOKIES_TXT` | ❌ | Inline cookies (small only — large values break Render's build). |
 | `WEBHOOK_SECRET` | ❌ | Optional Telegram webhook secret token. |
 | `YTDLP_PROXY` | ❌ | Outbound proxy for yt-dlp. |
 

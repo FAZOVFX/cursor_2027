@@ -15,12 +15,29 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Render mounts "Secret Files" under /etc/secrets/<filename>. These are the
+# default locations checked when no explicit *_COOKIES_FILE path is provided.
+DEFAULT_SECRET_DIR = "/etc/secrets"
+DEFAULT_TOKEN_FILE = os.path.join(DEFAULT_SECRET_DIR, "bot_token.txt")
+
 
 def _clean(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip()
     return value or None
+
+
+def _read_file(path: str | None) -> str | None:
+    if not path:
+        return None
+    try:
+        if os.path.isfile(path):
+            content = open(path, encoding="utf-8").read().strip()
+            return content or None
+    except OSError as exc:  # pragma: no cover - unexpected FS error
+        logger.warning("Could not read %s: %s", path, exc)
+    return None
 
 
 @dataclass
@@ -34,10 +51,15 @@ class Config:
     max_file_mb: int = 49
     download_dir: str = field(default_factory=lambda: tempfile.mkdtemp(prefix="dlbot_"))
     proxy: str | None = None
-    # Raw cookies.txt contents (Netscape format), per platform.
+    # Raw cookies.txt contents (Netscape format), per platform. Prefer files
+    # (below) for large cookies to avoid huge environment variables.
     cookies_all: str | None = None
     cookies_youtube: str | None = None
     cookies_instagram: str | None = None
+    # Explicit paths to cookies.txt files (e.g. Render Secret Files).
+    cookies_file: str | None = None
+    cookies_youtube_file: str | None = None
+    cookies_instagram_file: str | None = None
     _cookie_dir: str | None = field(default=None, repr=False)
 
     @property
@@ -48,12 +70,39 @@ class Config:
     def max_file_bytes(self) -> int:
         return self.max_file_mb * 1024 * 1024
 
+    def _cookie_file_candidates(self, platform: str) -> list[str]:
+        """Ordered list of explicit + default cookie-file paths for a platform."""
+
+        if platform == "youtube":
+            explicit = [self.cookies_youtube_file, self.cookies_file]
+            defaults = [
+                os.path.join(DEFAULT_SECRET_DIR, "youtube_cookies.txt"),
+                os.path.join(DEFAULT_SECRET_DIR, "cookies.txt"),
+            ]
+        elif platform == "instagram":
+            explicit = [self.cookies_instagram_file, self.cookies_file]
+            defaults = [
+                os.path.join(DEFAULT_SECRET_DIR, "instagram_cookies.txt"),
+                os.path.join(DEFAULT_SECRET_DIR, "cookies.txt"),
+            ]
+        else:
+            explicit = [self.cookies_file]
+            defaults = [os.path.join(DEFAULT_SECRET_DIR, "cookies.txt")]
+        return [p for p in (*explicit, *defaults) if p]
+
     def cookie_file_for(self, platform: str) -> str | None:
         """Return a path to a cookies.txt file for ``platform`` or ``None``.
 
-        Platform-specific cookies take precedence over the shared ``cookies_all``
-        value. Files are written lazily into a private directory.
+        Resolution order:
+        1. An existing cookies file (explicit ``*_COOKIES_FILE`` path or a
+           Render Secret File at a default location). Preferred — keeps large
+           cookies out of environment variables.
+        2. Raw ``*_COOKIES_TXT`` contents materialized to a temp file.
         """
+
+        for candidate in self._cookie_file_candidates(platform):
+            if os.path.isfile(candidate):
+                return candidate
 
         raw = None
         if platform == "youtube":
@@ -83,10 +132,16 @@ def load_config(env: dict[str, str] | None = None) -> Config:
 
     env = dict(os.environ if env is None else env)
 
+    # Token can come from an env var, an explicit file, or a Render Secret File
+    # mounted at /etc/secrets/bot_token.txt. Env var wins when present.
     token = _clean(env.get("BOT_TOKEN") or env.get("TELEGRAM_BOT_TOKEN"))
     if not token:
+        token_file = _clean(env.get("BOT_TOKEN_FILE")) or DEFAULT_TOKEN_FILE
+        token = _read_file(token_file)
+    if not token:
         raise RuntimeError(
-            "BOT_TOKEN is not set. Create a bot with @BotFather and set BOT_TOKEN."
+            "BOT_TOKEN is not set. Create a bot with @BotFather and set BOT_TOKEN "
+            "(or provide a bot_token.txt Secret File)."
         )
 
     # Render injects RENDER_EXTERNAL_URL automatically for web services.
@@ -104,4 +159,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         cookies_all=_clean(env.get("COOKIES_TXT")),
         cookies_youtube=_clean(env.get("YOUTUBE_COOKIES_TXT")),
         cookies_instagram=_clean(env.get("INSTAGRAM_COOKIES_TXT")),
+        cookies_file=_clean(env.get("COOKIES_FILE")),
+        cookies_youtube_file=_clean(env.get("YOUTUBE_COOKIES_FILE")),
+        cookies_instagram_file=_clean(env.get("INSTAGRAM_COOKIES_FILE")),
     )
