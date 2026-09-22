@@ -1,0 +1,24 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Deploy by pushing this repo to GitHub and clicking "New +" -> "Blueprint"
+# in the Render dashboard, or "New Web Service" using the Docker runtime.
+services:
+  - type: web
+    name: telegram-downloader-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      # Create the bot with @BotFather and paste the token here (set in the
+      # Render dashboard, do NOT commit it).
+      - key: BOT_TOKEN
+        sync: false
+      # Optional: Netscape-format cookies.txt contents to bypass YouTube/
+      # Instagram bot checks. See README "Cookies" section.
+      - key: COOKIES_TXT
+        sync: false
+      # Max upload size in MB (Telegram bot hard limit is 50).
+      - key: MAX_FILE_MB
+        value: "49"
+      # RENDER_EXTERNAL_URL is injected automatically and switches the bot to
+      # webhook mode; no manual value needed.
