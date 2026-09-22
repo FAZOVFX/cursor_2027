@@ -128,23 +128,31 @@ def test_classify_error_auth():
     assert not isinstance(err3, downloader.AuthRequiredError)
 
 
-def test_config_cookie_materialization(tmp_path):
+YT_COOKIE_LINE = ".youtube.com\tTRUE\t/\tTRUE\t0\tYT_NAME\tyt_value"
+IG_COOKIE_LINE = ".example.com\tTRUE\t/\tFALSE\t0\tIG_NAME\tig_value"
+
+
+def _read(path):
+    with open(path) as fh:
+        return fh.read()
+
+
+def test_config_cookie_materialization():
     cfg = load_config(
         {
             "BOT_TOKEN": "1:token",
-            "COOKIES_TXT": "# Netscape HTTP Cookie File\\nline",
-            "YOUTUBE_COOKIES_TXT": "# youtube-specific",
+            "COOKIES_TXT": IG_COOKIE_LINE,
+            "YOUTUBE_COOKIES_TXT": YT_COOKIE_LINE,
         }
     )
     yt = cfg.cookie_file_for("youtube")
     ig = cfg.cookie_file_for("instagram")
     assert yt is not None and ig is not None
-    with open(yt) as fh:
-        assert "youtube-specific" in fh.read()
-    with open(ig) as fh:
-        # instagram falls back to COOKIES_TXT, with escaped newline expanded
-        content = fh.read()
-        assert "Netscape" in content and "\n" in content
+    yt_content = _read(yt)
+    assert yt_content.startswith("# Netscape HTTP Cookie File")
+    assert "YT_NAME" in yt_content
+    # instagram falls back to COOKIES_TXT
+    assert "IG_NAME" in _read(ig)
 
 
 def test_config_no_cookies():
@@ -154,24 +162,25 @@ def test_config_no_cookies():
 
 def test_config_cookie_file_env_takes_precedence(tmp_path):
     cookie = tmp_path / "yt.txt"
-    cookie.write_text("# Netscape HTTP Cookie File\n")
+    cookie.write_text("# Netscape HTTP Cookie File\n" + YT_COOKIE_LINE + "\n")
     cfg = load_config(
         {
             "BOT_TOKEN": "1:token",
             "YOUTUBE_COOKIES_FILE": str(cookie),
-            "YOUTUBE_COOKIES_TXT": "inline-should-be-ignored",
+            "YOUTUBE_COOKIES_TXT": IG_COOKIE_LINE,  # would contain IG_NAME
         }
     )
     # An existing file wins over inline *_TXT content.
-    assert cfg.cookie_file_for("youtube") == str(cookie)
+    content = _read(cfg.cookie_file_for("youtube"))
+    assert "YT_NAME" in content and "IG_NAME" not in content
 
 
 def test_config_shared_cookie_file_for_both(tmp_path):
     cookie = tmp_path / "all.txt"
-    cookie.write_text("# Netscape HTTP Cookie File\n")
+    cookie.write_text("# Netscape HTTP Cookie File\n" + YT_COOKIE_LINE + "\n")
     cfg = load_config({"BOT_TOKEN": "1:token", "COOKIES_FILE": str(cookie)})
-    assert cfg.cookie_file_for("youtube") == str(cookie)
-    assert cfg.cookie_file_for("instagram") == str(cookie)
+    assert "YT_NAME" in _read(cfg.cookie_file_for("youtube"))
+    assert "YT_NAME" in _read(cfg.cookie_file_for("instagram"))
 
 
 def test_config_missing_cookie_file_falls_back_to_txt(tmp_path):
@@ -179,12 +188,13 @@ def test_config_missing_cookie_file_falls_back_to_txt(tmp_path):
         {
             "BOT_TOKEN": "1:token",
             "YOUTUBE_COOKIES_FILE": str(tmp_path / "does_not_exist.txt"),
-            "YOUTUBE_COOKIES_TXT": "# Netscape\ncookie",
+            "YOUTUBE_COOKIES_TXT": YT_COOKIE_LINE,
         }
     )
     resolved = cfg.cookie_file_for("youtube")
     assert resolved is not None
     assert os.path.isfile(resolved)
+    assert "YT_NAME" in _read(resolved)
 
 
 def test_config_token_from_file(tmp_path):
