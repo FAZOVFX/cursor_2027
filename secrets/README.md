@@ -1,9 +1,16 @@
 # Secrets (token & cookies)
 
-**Never commit real tokens or cookies.** The files here ending in `.example`
-are empty templates that only show the expected format. Real values go to
-**Render → your service → Environment → Secret Files** (or local files that are
-git-ignored).
+> 🔴 **NEVER put real tokens or cookies in this repository.** Do **not** rename
+> the `*.example` templates to `*.txt` and paste real values — that publishes
+> your secrets on GitHub. YouTube cookies grant full access to your Google
+> account, and a leaked bot token lets anyone control your bot. If this happens,
+> immediately sign out of all Google sessions + change your password, and
+> `/revoke` the bot token in @BotFather.
+
+The files here ending in `.example` are empty templates that only show the
+expected format. Real values go to **Render → your service → Environment →
+Secret Files** (never the repo). Real `secrets/*.txt` files are git-ignored so
+they can only be created locally, not committed.
 
 ## Why Secret Files (not env vars)?
 
