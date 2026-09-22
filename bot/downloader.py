@@ -49,6 +49,27 @@ class DownloadResult:
         return os.path.getsize(self.path)
 
 
+@dataclass
+class SearchResult:
+    title: str
+    url: str
+    uploader: str | None = None
+    duration: int | None = None
+
+
+def format_duration(seconds: int | None) -> str:
+    """Format a duration in seconds as ``m:ss`` (or ``h:mm:ss``)."""
+
+    if not seconds or seconds < 0:
+        return "?"
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
 def find_url(text: str) -> str | None:
     """Return the first http(s) URL found in ``text``."""
 
@@ -183,6 +204,59 @@ async def download(url: str, quality: str, *, cookiefile: str | None = None,
     opts = build_ydl_opts(quality, outdir, cookiefile=cookiefile, proxy=proxy)
     logger.info("Downloading %s at quality=%s", url, quality)
     return await asyncio.to_thread(_run_download, url, opts, outdir)
+
+
+def _run_search(query: str, limit: int, cookiefile: str | None,
+                proxy: str | None) -> list[SearchResult]:
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "noplaylist": True,
+        "default_search": "ytsearch",
+    }
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
+    if proxy:
+        opts["proxy"] = proxy
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+    except yt_dlp.utils.DownloadError as exc:  # pragma: no cover - message varies
+        raise _classify_error(str(exc)) from exc
+
+    entries = [e for e in (info.get("entries") or []) if e]
+    results: list[SearchResult] = []
+    for entry in entries:
+        url = (
+            entry.get("url")
+            or entry.get("webpage_url")
+            or (f"https://www.youtube.com/watch?v={entry['id']}"
+                if entry.get("id") else None)
+        )
+        if not url:
+            continue
+        results.append(
+            SearchResult(
+                title=entry.get("title") or "Nomsiz",
+                url=url,
+                uploader=entry.get("uploader") or entry.get("channel"),
+                duration=entry.get("duration"),
+            )
+        )
+    return results
+
+
+async def search(query: str, *, limit: int = 5, cookiefile: str | None = None,
+                 proxy: str | None = None) -> list[SearchResult]:
+    """Search YouTube for ``query`` and return up to ``limit`` results."""
+
+    query = query.strip()
+    if not query:
+        return []
+    logger.info("Searching YouTube for %r (limit=%d)", query, limit)
+    return await asyncio.to_thread(_run_search, query, limit, cookiefile, proxy)
 
 
 def human_size(num_bytes: int) -> str:

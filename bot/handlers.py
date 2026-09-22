@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import tempfile
 import uuid
 
 from telegram import (
@@ -15,25 +16,29 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import downloader
+from . import downloader, recognizer
 from .config import Config
 
 logger = logging.getLogger(__name__)
 
 WELCOME = (
-    "👋 Salom! Men YouTube va Instagram’dan video yuklab beradigan botman.\n\n"
-    "📎 Menga YouTube yoki Instagram havolasini yuboring.\n"
-    "▶️ YouTube uchun sifatni tanlaysiz: MP3 (audio) yoki 360p / 480p / 720p / 1080p.\n"
-    "📸 Instagram uchun videoni to‘g‘ridan-to‘g‘ri yuboraman.\n\n"
-    "⚠️ Telegram bot orqali maksimal fayl hajmi 50 MB. Katta 1080p videolar "
-    "chegaradan oshsa, pastroq sifat yoki MP3 tanlang."
+    "👋 Salom! Men YouTube va Instagram’dan video/musiqa yuklab beradigan botman.\n\n"
+    "Mana nima qila olaman:\n"
+    "📎 *Havola* yuboring (YouTube/Instagram) — yuklab beraman.\n"
+    "🔎 *Artist yoki qo‘shiq nomini* yozing — variantlar chiqaraman, tanlagansiz "
+    "yuklanadi.\n"
+    "🎤 *Ovozli xabar* yoki *qo‘shiqdan parcha* yuboring — qaysi qo‘shiq ekanini "
+    "topib, variantlarini chiqaraman.\n\n"
+    "▶️ YouTube uchun sifat: MP3 (audio) yoki 360p / 480p / 720p / 1080p.\n\n"
+    "⚠️ Telegram orqali maksimal fayl hajmi 50 MB. Katta 1080p oshsa, pastroq "
+    "sifat yoki MP3 tanlang."
 )
 
 HELP = (
     "ℹ️ *Foydalanish*\n\n"
-    "1. YouTube yoki Instagram havolasini yuboring.\n"
-    "2. YouTube bo‘lsa, tugmalardan sifatni tanlang.\n"
-    "3. Men faylni yuklab, shu yerga jo‘nataman.\n\n"
+    "• Havola yuboring — video/audio yuklab beraman.\n"
+    "• Qo‘shiq yoki artist nomini yozing — variantlardan tanlaysiz.\n"
+    "• Ovozli xabar / qo‘shiq parchasini yuboring — nomini topib beraman.\n\n"
     "Buyruqlar:\n"
     "/start – boshlash\n"
     "/help – yordam"
@@ -46,6 +51,24 @@ def _config(context: ContextTypes.DEFAULT_TYPE) -> Config:
 
 def _links(context: ContextTypes.DEFAULT_TYPE) -> dict[str, str]:
     return context.application.bot_data.setdefault("links", {})
+
+
+def _searches(context: ContextTypes.DEFAULT_TYPE) -> dict[str, list]:
+    return context.application.bot_data.setdefault("searches", {})
+
+
+def _attribution(context: ContextTypes.DEFAULT_TYPE) -> str:
+    username = getattr(context.bot, "username", None)
+    return f"@{username}" if username else "shu bot"
+
+
+def _build_caption(title: str, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Caption placed under every sent file: title + 'bot orqali yuklandi'."""
+
+    title = (title or "").strip()
+    tag = _attribution(context)
+    header = f"🎵 {title}\n\n" if title else ""
+    return f"{header}⤵️ {tag} orqali yuklandi"
 
 
 def build_quality_keyboard(token: str) -> InlineKeyboardMarkup:
@@ -66,6 +89,22 @@ def build_quality_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([audio_row, video_row])
 
 
+def build_search_keyboard(token: str, results: list) -> InlineKeyboardMarkup:
+    """One button per search result, labelled with title + duration."""
+
+    rows = []
+    for index, result in enumerate(results):
+        dur = downloader.format_duration(result.duration)
+        label = f"{index + 1}. {result.title}"
+        if len(label) > 55:
+            label = label[:54] + "…"
+        label = f"{label}  ⏱ {dur}"
+        rows.append(
+            [InlineKeyboardButton(label, callback_data=f"s:{token}:{index}")]
+        )
+    return InlineKeyboardMarkup(rows)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(WELCOME)
 
@@ -80,10 +119,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     text = message.text or message.caption or ""
     url = downloader.find_url(text)
+
     if not url:
-        await message.reply_text(
-            "❗️ Havola topilmadi. Iltimos, YouTube yoki Instagram havolasini yuboring."
-        )
+        # No link -> treat the text as a song/artist search query.
+        query = text.strip()
+        if len(query) < 2:
+            await message.reply_text(
+                "❗️ Havola yoki qo‘shiq/artist nomini yuboring."
+            )
+            return
+        await present_search(update, context, query)
         return
 
     platform = downloader.detect_platform(url)
@@ -99,6 +144,42 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await message.reply_text(
         "🎯 Sifatni tanlang:",
         reply_markup=build_quality_keyboard(token),
+    )
+
+
+async def present_search(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                         query: str, header: str | None = None) -> None:
+    """Search YouTube for ``query`` and show the results as buttons."""
+
+    chat_id = update.effective_chat.id
+    cfg = _config(context)
+    status = await context.bot.send_message(chat_id, f"🔎 “{query}” qidirilmoqda…")
+    try:
+        results = await downloader.search(
+            query, limit=5,
+            cookiefile=cfg.cookie_file_for("youtube"),
+            proxy=cfg.proxy,
+        )
+    except downloader.AuthRequiredError:
+        await status.edit_text(
+            "🔒 Qidiruv uchun YouTube cookie kerak (bot tekshiruvi). "
+            "Administrator COOKIES_TXT ni sozlashi lozim."
+        )
+        return
+    except downloader.DownloadError:
+        await status.edit_text("❌ Qidiruvda xatolik. Keyinroq urinib ko‘ring.")
+        return
+
+    if not results:
+        await status.edit_text("😕 Hech narsa topilmadi. Boshqacha yozib ko‘ring.")
+        return
+
+    token = uuid.uuid4().hex[:10]
+    _searches(context)[token] = results
+    prefix = f"{header}\n\n" if header else ""
+    await status.edit_text(
+        f"{prefix}🎯 Quyidagilardan birini tanlang:",
+        reply_markup=build_search_keyboard(token, results),
     )
 
 
@@ -125,6 +206,71 @@ async def on_quality_selected(update: Update, context: ContextTypes.DEFAULT_TYPE
     await _process_download(update, context, url, quality, platform,
                             status_via_callback=True)
     _links(context).pop(token, None)
+
+
+async def on_search_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """User picked a search result -> offer the quality menu for its URL."""
+
+    query = update.callback_query
+    await query.answer()
+    try:
+        _, token, index_str = query.data.split(":", 2)
+        index = int(index_str)
+    except (ValueError, IndexError):
+        await query.edit_message_text("❗️ Noto‘g‘ri tanlov.")
+        return
+
+    results = _searches(context).get(token)
+    if not results or index >= len(results):
+        await query.edit_message_text(
+            "⌛️ Ro‘yxat eskirdi. Iltimos, qaytadan qidiring."
+        )
+        return
+
+    result = results[index]
+    link_token = uuid.uuid4().hex[:10]
+    _links(context)[link_token] = result.url
+    await query.edit_message_text(
+        f"✅ Tanlandi: {result.title}\n\n🎯 Sifatni tanlang:",
+        reply_markup=build_quality_keyboard(link_token),
+    )
+    _searches(context).pop(token, None)
+
+
+async def on_audio_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Recognize a voice message / audio snippet, then show search variants."""
+
+    message = update.message
+    chat_id = update.effective_chat.id
+    media = message.voice or message.audio
+    if media is None:
+        return
+
+    status = await context.bot.send_message(chat_id, "🎧 Qo‘shiq aniqlanmoqda…")
+
+    tmp_dir = tempfile.mkdtemp(prefix="rec_", dir=_config(context).download_dir)
+    audio_path = os.path.join(tmp_dir, "clip")
+    try:
+        tg_file = await context.bot.get_file(media.file_id)
+        await tg_file.download_to_drive(audio_path)
+
+        result = await recognizer.recognize(audio_path)
+        if result is None:
+            await status.edit_text(
+                "😕 Afsus, qo‘shiqni aniqlay olmadim. Aniqroq/uzunroq parcha "
+                "yuboring yoki nomini yozing."
+            )
+            return
+
+        await status.edit_text(f"🎵 Topildi: *{result.label}*",
+                               parse_mode=constants.ParseMode.MARKDOWN)
+        await present_search(update, context, result.query,
+                             header=f"🎵 Topildi: {result.label}")
+    except Exception:  # noqa: BLE001
+        logger.exception("Audio recognition flow failed")
+        await status.edit_text("❌ Xatolik yuz berdi. Keyinroq urinib ko‘ring.")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 async def _process_download(update: Update, context: ContextTypes.DEFAULT_TYPE,
@@ -157,12 +303,12 @@ async def _process_download(update: Update, context: ContextTypes.DEFAULT_TYPE,
                          "Iltimos, pastroq sifat yoki MP3 tanlang.")
             return
 
-        caption = result.title[:1000]
+        caption = _build_caption(result.title, context)
         if result.is_audio:
             await context.bot.send_chat_action(chat_id, constants.ChatAction.UPLOAD_VOICE)
             with open(result.path, "rb") as fh:
                 await context.bot.send_audio(
-                    chat_id, audio=fh, title=result.title,
+                    chat_id, audio=fh, title=result.title, caption=caption,
                     filename=os.path.basename(result.path),
                     read_timeout=180, write_timeout=180, connect_timeout=60,
                 )

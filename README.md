@@ -1,15 +1,21 @@
 # cursor_2027 — Telegram video downloader bot
 
-A Telegram bot that downloads videos from **YouTube** and **Instagram**.
+A Telegram bot (Uzbek UI) that downloads videos/music from **YouTube** and
+**Instagram**, searches by name, and recognizes songs from an audio clip.
 
-- 📥 Send a YouTube or Instagram link to the bot.
+- 📥 Send a YouTube or Instagram **link** → download it.
+- 🔎 Send an **artist / song name** → the bot searches YouTube and shows options;
+  pick one and choose the quality.
+- 🎤 Send a **voice message or a snippet of a song** → the bot recognizes it
+  (Shazam) and shows matching options to download.
 - 🎬 For YouTube, pick the quality: **MP3 (audio)** or **360p / 480p / 720p / 1080p**.
-- 📸 For Instagram, the video is sent directly.
+- 🏷️ Every sent file is captioned with *"… orqali yuklandi"* (downloaded via the bot).
 - ☁️ Designed to run on the **Render.com free tier** using Docker + webhooks.
 
-Built with [python-telegram-bot](https://docs.python-telegram-bot.org) and
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) (with `ffmpeg` for merging 1080p and
-extracting MP3).
+Built with [python-telegram-bot](https://docs.python-telegram-bot.org),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) and
+[shazamio](https://github.com/shazamio/ShazamIO) (with `ffmpeg` for merging
+1080p, extracting MP3, and normalizing audio for recognition).
 
 ---
 

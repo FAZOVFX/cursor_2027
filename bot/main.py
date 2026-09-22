@@ -45,6 +45,12 @@ def build_application(config):
         CallbackQueryHandler(handlers.on_quality_selected, pattern=r"^q:")
     )
     application.add_handler(
+        CallbackQueryHandler(handlers.on_search_selected, pattern=r"^s:")
+    )
+    application.add_handler(
+        MessageHandler(filters.VOICE | filters.AUDIO, handlers.on_audio_message)
+    )
+    application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.on_message)
     )
     return application
