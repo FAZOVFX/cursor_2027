@@ -202,7 +202,8 @@ async def download(url: str, quality: str, *, cookiefile: str | None = None,
 
     outdir = tempfile.mkdtemp(prefix="dl_", dir=base_dir)
     opts = build_ydl_opts(quality, outdir, cookiefile=cookiefile, proxy=proxy)
-    logger.info("Downloading %s at quality=%s", url, quality)
+    logger.info("Downloading %s at quality=%s (cookies=%s)",
+                url, quality, "yes" if cookiefile else "no")
     return await asyncio.to_thread(_run_download, url, opts, outdir)
 
 
